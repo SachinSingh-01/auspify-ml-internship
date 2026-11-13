@@ -1,52 +1,73 @@
 
 import joblib
 import pandas as pd
+from pathlib import Path
 
 
-# 1. Load saved inference artifacts
-artifacts = joblib.load("netflix_inference_artifacts.pkl")
+# ==========================================
+# 1. LOAD SAVED INFERENCE ARTIFACTS
+# ==========================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+artifacts = joblib.load(
+    BASE_DIR / "netflix_inference_artifacts.pkl"
+)
 
 model = artifacts["model"]
 encoder = artifacts["encoder"]
 feature_columns = artifacts["feature_columns"]
 
+print("Inference artifacts loaded successfully!")
+print("Number of features:", len(feature_columns))
 
-# 2. Preprocessing function
+
+# ==========================================
+# 2. PREPROCESSING FUNCTION
+# ==========================================
+
 def preprocess_new_data(data):
 
+    # Required input columns
     required_columns = [
         "country",
         "rating",
         "release_year"
     ]
 
-    # Check required columns
+    # Check missing columns
     for col in required_columns:
         if col not in data.columns:
-            raise ValueError(f"Missing required column: {col}")
+            raise ValueError(
+                f"Missing required column: {col}"
+            )
 
-    # Select required columns
+    # Select columns in correct order
     data = data[required_columns].copy()
 
     # Check missing values
     if data.isnull().any().any():
-        raise ValueError("Input contains missing values.")
+        raise ValueError(
+            "Input data contains missing values."
+        )
 
-    # Convert release_year to numeric
+    # Convert release year to numeric
     data["release_year"] = pd.to_numeric(
         data["release_year"],
         errors="raise"
     )
 
-    # Encode categorical features
+    # Apply fitted encoder
     encoded_data = encoder.transform(
         data[["country", "rating"]]
     )
 
+    # Get encoded feature names
     encoded_columns = encoder.get_feature_names_out(
         ["country", "rating"]
     )
 
+    # Convert encoded data into DataFrame
     encoded_df = pd.DataFrame(
         encoded_data,
         columns=encoded_columns,
@@ -71,30 +92,62 @@ def preprocess_new_data(data):
     return processed_data
 
 
-# 3. Create sample raw Netflix records
-new_netflix_data = pd.DataFrame({
-    "country": ["India", "South Korea"],
-    "rating": ["TV-14", "TV-MA"],
-    "release_year": [2024, 2023]
-})
 
+# ==========================================
+# 3. LOAD VALIDATION CSV
+# ==========================================
 
-# 4. Preprocess raw records
-processed_data = preprocess_new_data(
-    new_netflix_data
+validation_data = pd.read_csv(
+    BASE_DIR / "validation_samples.csv"
 )
 
+# Separate actual labels from input features
+actual_labels = validation_data.pop("actual")
 
-# 5. Generate predictions
+
+# ==========================================
+# 4. PREPROCESS VALIDATION DATA
+# ==========================================
+
+processed_data = preprocess_new_data(
+    validation_data
+)
+
+print("\nPreprocessing completed!")
+print("Processed data shape:", processed_data.shape)
+
+
+# ==========================================
+# 5. GENERATE PREDICTIONS
+# ==========================================
+
 predictions = model.predict(processed_data)
 
 
-# 6. Display results
-print("\nNetflix Content Classification Results")
-print("-" * 45)
+# ==========================================
+# 6. COMPARE ACTUAL AND PREDICTED LABELS
+# ==========================================
 
-for i, prediction in enumerate(predictions):
+results = pd.DataFrame({
+    "Actual": actual_labels.values,
+    "Predicted": predictions
+})
 
-    print(
-        f"Netflix Record {i + 1}: {prediction}"
-    )
+results["Match"] = (
+    results["Actual"] == results["Predicted"]
+)
+
+print("\nValidation Results")
+print("=" * 50)
+
+print(results.to_string(index=False))
+
+print("\nCorrect predictions:", results["Match"].sum())
+print("Total records:", len(results))
+
+print(
+    "Sample Accuracy:",
+    results["Match"].mean()
+)
+
+print("\nValidation completed!")
