@@ -1,0 +1,8 @@
+#### `requirements.txt` (Inside `Task_4_Content_Segmentation/`)
+```text
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+joblib
